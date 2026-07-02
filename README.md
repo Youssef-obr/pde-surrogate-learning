@@ -4,19 +4,19 @@ This project studies how classical machine learning models can learn the time ev
 
 The equation considered here is the 1D viscous Burgers equation:
 
-[
-\partial_t u + u\partial_x u = \nu \partial_{xx}u
-]
+$$
+\partial_t u + u \partial_x u = \nu \partial_{xx}u
+$$
 
-where (u(x,t)) is the state of the system and (\nu) is the viscosity.
+where \(u(x,t)\) is the state of the system and \(\nu\) is the viscosity.
 
 The long-term goal is to generate reference trajectories with a numerical PDE solver, then train machine learning models to approximate the one-step evolution:
 
-[
+$$
 (u^n, \nu) \mapsto u^{n+1}
-]
+$$
 
-where (u^n) is the discretized solution at time step (n).
+where \(u^n\) is the discretized solution at time step \(n\).
 
 ## Current stage
 
@@ -24,9 +24,9 @@ For now, the project focuses on building a reference numerical solver for the 1D
 
 The solver uses:
 
-* Rusanov flux for the nonlinear transport term,
-* central finite differences for the diffusion term,
-* RK4 time integration.
+- Rusanov flux for the nonlinear transport term
+- central finite differences for the diffusion term
+- RK4 time integration
 
 This solver will later be used to generate the training data for the machine learning part.
 
@@ -36,15 +36,15 @@ The following animations show the numerical evolution of the Burgers equation fo
 
 The left animation uses a periodic sinusoidal initial condition:
 
-[
+$$
 u(x,0)=\sin(2\pi x)
-]
+$$
 
 The right animation uses a localized Gaussian initial condition:
 
-[
+$$
 u(x,0)=\exp(-x^2/2)
-]
+$$
 
 <table>
   <tr>
@@ -53,10 +53,10 @@ u(x,0)=\exp(-x^2/2)
   </tr>
   <tr>
     <td align="center">
-      <img src="figures/burgers1Dsin.gif" width="420"/>
+      <img src="figures/burgers1Dsin.gif" width="340"/>
     </td>
     <td align="center">
-      <img src="figures/burgers1Dexp.gif" width="420"/>
+      <img src="figures/burgers1Dexp.gif" width="340"/>
     </td>
   </tr>
 </table>

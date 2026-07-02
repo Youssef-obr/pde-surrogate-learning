@@ -61,6 +61,22 @@ $$
   </tr>
 </table>
 
+## Energy decay
+
+As an additional validation step, the discrete energy of the solution is computed over time:
+
+$$
+E^n = \frac{1}{2}\sum_i (u_i^n)^2 \Delta x
+$$
+
+For the viscous Burgers equation, viscosity should dissipate energy over time. Therefore, a decreasing energy curve is a useful sanity check for the numerical solver.
+
+<p align="center">
+  <img src="figures/energysin.png" width="520"/>
+</p>
+
+The observed energy decay confirms that the solver captures the expected dissipative behavior for the sinusoidal periodic initial condition.
+
 These simulations are used to check that the solver behaves coherently before moving to the machine learning stage.
 
 ## Next direction

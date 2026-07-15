@@ -143,25 +143,32 @@ Ridge regression consistently improves over the persistence baseline. However, a
 
 This is expected: the Burgers equation contains a nonlinear transport term, so a purely linear model can capture part of the global trend but struggles with longer-horizon nonlinear deformation.
 
-## Example prediction
+## Prediction examples
 
-The following animation shows Ridge regression on a validation trajectory for `store_every = 250`.
+The following figures show the first prediction frame for the same validation trajectory.
 
-<p align="center">
-  <img src="figures/burgers3D250.gif" width="620"/>
-</p>
+Using the same trajectory makes the comparison easier to interpret: the difference between the two figures comes from the prediction horizon, not from a different initial condition.
 
-For this intermediate horizon, Ridge captures the global evolution of the solution, but it already starts to smooth some local variations.
+<table>
+  <tr>
+    <td align="center"><b>Intermediate horizon: store_every = 250</b></td>
+    <td align="center"><b>Long horizon: store_every = 1000</b></td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="figures/burgers3D250.png" width="420"/>
+    </td>
+    <td align="center">
+      <img src="figures/burgers3D1000.png" width="420"/>
+    </td>
+  </tr>
+</table>
 
-## Long-horizon limitation
+For the intermediate horizon, Ridge regression captures the global evolution reasonably well, while already smoothing some local variations.
 
-For a longer horizon, `store_every = 1000`, the prediction task becomes significantly harder.
+For the longer horizon, the prediction task is significantly harder. Ridge still improves over the persistence baseline, but it no longer follows the local nonlinear deformation accurately.
 
-<p align="center">
-  <img src="figures/burgers3D1000.gif" width="620"/>
-</p>
-
-The model still improves over the persistence baseline, but it no longer follows the local nonlinear deformation accurately. This motivates the next step: using nonlinear classical ML models.
+At later times, viscosity dissipates high-frequency structures and the solution becomes smoother. In that regime, Ridge predictions become more accurate again. The first-frame comparison is therefore the most informative view of the model's ability to capture nonlinear dynamics.
 
 ## Next steps
 

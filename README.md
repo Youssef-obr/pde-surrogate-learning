@@ -1,16 +1,16 @@
 # Classical ML Surrogates for the 1D Burgers Equation
 
-This project explores whether classical machine learning models can learn the time evolution of a physical system governed by a nonlinear partial differential equation.
+This project studies whether classical machine learning models can learn the time evolution of a nonlinear physical system governed by a partial differential equation.
 
 The test case is the 1D viscous Burgers equation:
 
 $$
-\partial_t u + u \partial_x u = \nu \partial_{xx}u
+\partial_t u + u \partial_x u = \nu \partial_{xx} u
 $$
 
 where $u(x,t)$ is the state of the system and $\nu$ is the viscosity.
 
-The goal is to generate reference trajectories with a numerical PDE solver, then train classical machine learning models to approximate the discrete evolution operator:
+The goal is to generate reference trajectories with a numerical solver, then train classical machine learning models to approximate the discrete evolution operator:
 
 $$
 (u^n, \nu) \mapsto u^{n+k}
@@ -20,43 +20,16 @@ where $u^n$ is the discretized solution at time step $n$, and $k$ is the predict
 
 ---
 
-## Project summary
-
-This project contains two parts:
-
-1. A numerical solver for the 1D viscous Burgers equation.
-2. A classical machine learning pipeline to learn short-time PDE evolution from generated trajectories.
-
-The final model used in this version of the project is:
-
-$$
-\text{Kernel Ridge Regression} + \text{HGB residual correction} + \text{amplitude calibration}
-$$
-
-The model captures the global evolution of the solution and correctly follows the spatial displacement of peaks. Its main remaining limitation is that peak amplitudes are still slightly underestimated during rollout.
-
-This version of the project stops here intentionally. The next step would be to test more advanced surrogate models, for example PCA/POD-based models, spectral features, or neural surrogates.
-
----
-
 ## Numerical solver
 
-Reference trajectories are generated using a finite-volume / finite-difference solver.
+Reference trajectories are generated with a numerical solver using:
 
-The solver uses:
+- Rusanov flux for the nonlinear transport term;
+- central finite differences for the diffusion term;
+- RK4 time integration;
+- periodic boundary conditions.
 
-- Rusanov flux for the nonlinear transport term
-- central finite differences for the diffusion term
-- RK4 time integration
-- periodic boundary conditions for the machine learning experiments
-
-The solver is used as the ground-truth generator for supervised learning.
-
----
-
-## Solver validation
-
-Two simple initial conditions are used to visually validate the solver.
+The solver is first validated on simple initial conditions.
 
 <table>
   <tr>
@@ -73,7 +46,7 @@ Two simple initial conditions are used to visually validate the solver.
   </tr>
 </table>
 
-For the viscous Burgers equation, viscosity dissipates energy over time. As a sanity check, the discrete energy is computed as:
+For the viscous Burgers equation, viscosity dissipates energy over time. The discrete energy is computed as:
 
 $$
 E^n = \frac{1}{2}\sum_i (u_i^n)^2 \Delta x
@@ -89,7 +62,7 @@ The observed decay confirms that the solver captures the expected dissipative be
 
 ## Machine learning formulation
 
-The machine learning task is supervised regression.
+The machine learning task is formulated as supervised regression.
 
 Each input sample is:
 
@@ -106,62 +79,111 @@ $$
 Random periodic initial conditions are generated as finite Fourier series:
 
 $$
-u(x,0)=\sum_{j=1}^{5} a_j \sin(2\pi j x + \theta_j)
+u(x,0) = \sum_{j=1}^{5} a_j \sin(2\pi jx + \theta_j)
 $$
 
 where the amplitudes $a_j$, phases $\theta_j$, and viscosity $\nu$ are sampled randomly.
 
-The train/validation split is done by trajectory ID, so that all states from the same trajectory remain in the same split. This avoids leakage between training and validation.
+The train/validation split is performed by trajectory ID, so that all states from the same trajectory remain in the same split.
 
 ---
 
 ## Models tested
 
-The following classical models and variants were tested:
+Several classical machine learning approaches were tested.
 
 | Model / idea | Outcome |
 |---|---|
-| Persistence baseline | Useful sanity-check baseline, but poor rollout accuracy |
-| Linear Ridge | Strong simple baseline, better than persistence |
-| Polynomial Ridge | Did not improve; unstable / worse in this setup |
-| Kernel Ridge Regression | Best standalone classical model |
-| HGB Regressor | Did not outperform Kernel Ridge as a direct predictor |
-| Residual learning | Improved peak shape visually in some cases, but worsened rollout error |
-| PDE-inspired features | Improved one-step Linear Ridge, but did not improve rollout |
-| HGB residual correction | Small improvement over direct Kernel Ridge |
+| Persistence baseline | Useful sanity check, but poor rollout accuracy |
+| Linear Ridge | Strong simple baseline |
+| Polynomial Ridge | Did not improve the results |
+| Kernel Ridge Regression | Best standalone model |
+| HistGradientBoosting Regressor | Did not outperform Kernel Ridge as a direct predictor |
+| Residual learning | Did not improve rollout stability |
+| PDE-inspired features | Improved some one-step results, but not rollout |
+| HGB residual correction | Small improvement over Kernel Ridge |
 | Amplitude calibration | Best final improvement for rollout accuracy |
 
-The final retained model is:
+The final retained model combines Kernel Ridge Regression, HGB residual correction, and amplitude calibration.
+
+---
+
+## Amplitude calibration
+
+Kernel Ridge Regression with HGB residual correction captured the global shape of the solution and the spatial position of the peaks, but it still underestimated peak amplitudes.
+
+Let the corrected prediction before amplitude calibration be:
 
 $$
-\hat{u}^{n+k}_{\text{final}}
+\tilde{u}^{n+k}
 =
-\bar{u}
+\hat{u}_{\mathrm{KRR}}^{n+k}
++
+\hat{e}_{\mathrm{HGB}}^{n+k}
+$$
+
+where $\hat{e}_{\mathrm{HGB}}^{n+k}$ is the residual predicted by the HGB correction model.
+
+The final prediction is obtained by scaling the deviation from the spatial mean:
+
+$$
+\hat{u}_{\mathrm{final}}^{n+k}
+=
+\bar{u}^n
 +
 c
 \left(
-\hat{u}^{n+k}_{\text{KRR+HGB}}
+\tilde{u}^{n+k}
 -
-\bar{u}
+\bar{u}^n
 \right)
 $$
 
-where $\bar{u}$ is the spatial mean of the current state and $c$ is a scalar amplitude calibration factor fitted on validation data.
+with
+
+$$
+\bar{u}^n
+=
+\frac{1}{N}
+\sum_{i=0}^{N-1} u_i^n
+$$
+
+The scalar $c$ is fitted on validation predictions by least squares:
+
+$$
+c
+=
+\frac{
+\sum_s
+\left\langle
+\tilde{u}_s^{n+k} - \bar{u}_s^n,
+u_{s,\mathrm{true}}^{n+k} - \bar{u}_s^n
+\right\rangle
+}{
+\sum_s
+\left\lVert
+\tilde{u}_s^{n+k} - \bar{u}_s^n
+\right\rVert_2^2
+}
+$$
+
+This correction was added because the model was already predicting the correct global shape and peak locations, but its amplitudes were too conservative. Scaling around the spatial mean boosts peaks and valleys without shifting the whole solution vertically.
 
 ---
 
 ## Evaluation
 
-Models are evaluated using relative L2 error:
+Models are evaluated using the relative L2 error:
 
 $$
-\frac{\lVert y_{\text{true}} - y_{\text{pred}} \rVert_2}{\lVert y_{\text{true}} \rVert_2}
+\frac{\lVert y_{\mathrm{true}} - y_{\mathrm{pred}} \rVert_2}
+{\lVert y_{\mathrm{true}} \rVert_2}
 $$
 
 Two evaluation modes are used:
 
-1. **One-step prediction error**: predicts one future state from the current state.
-2. **Rollout error**: recursively applies the model multiple times to simulate a trajectory.
+- one-step prediction error, where the model predicts one future state;
+- rollout error, where the model is recursively applied to simulate a trajectory.
 
 Rollout error is the most important metric because it measures whether the learned model remains stable when its own predictions are fed back as inputs.
 
@@ -171,10 +193,10 @@ Rollout error is the most important metric because it measures whether the learn
 
 The main experiment uses:
 
-- grid size: $N=128$
-- prediction horizon: `store_every = 250`
-- periodic random Fourier initial conditions
-- validation split by trajectory
+- grid size: $N = 128$;
+- prediction horizon: `store_every = 250`;
+- periodic random Fourier initial conditions;
+- validation split by trajectory.
 
 Representative validation results:
 
@@ -186,7 +208,7 @@ Representative validation results:
 | Kernel Ridge + HGB correction | — | 0.610 |
 | Kernel Ridge + HGB correction + amplitude calibration | — | **0.490** |
 
-The final model significantly improves rollout accuracy compared to the direct Kernel Ridge model.
+The final model improves rollout accuracy compared to direct Kernel Ridge Regression.
 
 ---
 
@@ -198,68 +220,22 @@ The animation below shows the final model rollout on an unseen validation trajec
   <img src="figures/rollout_krr_hgb_amplitude_store250.gif" width="620"/>
 </p>
 
-The model captures:
-
-- the global shape of the solution,
-- the direction of evolution,
-- the spatial position of the main peaks,
-- the dissipative smoothing behavior.
-
-The main remaining limitation is amplitude underestimation: the predicted peaks are still slightly too conservative.
-
----
-
-## Interpretation
-
-The project shows that classical machine learning can learn a meaningful approximation of the Burgers time-evolution operator.
-
-Kernel Ridge Regression gives the strongest standalone classical model. Adding a residual correction model and amplitude calibration improves rollout performance, but does not completely remove the peak-amplitude bias.
-
-This behavior is expected: the models are trained with one-step supervised regression losses, which tend to produce conservative predictions. During recursive rollout, this conservativeness accumulates and leads to smoothed peaks.
-
-The final result is therefore a useful classical ML surrogate baseline, but not a full replacement for a numerical solver.
-
----
-
-## Limitations
-
-The main limitations of the current approach are:
-
-- the model is trained on one-step prediction, not directly on rollout loss;
-- peak amplitudes are underestimated;
-- recursive rollout accumulates prediction errors;
-- raw grid-based regression may not be the best representation for PDE dynamics;
-- the model does not explicitly enforce physical invariants beyond what it learns from data.
-
----
-
-## Possible next steps
-
-This version of the project stops at the classical surrogate baseline.
-
-Natural next directions include:
-
-- PCA/POD + regression on reduced coefficients;
-- Fourier or spectral feature representations;
-- rollout-aware training objectives;
-- peak-weighted losses;
-- neural operator or deep learning surrogates;
-- comparison against simple numerical time-stepping baselines.
+The model captures the global shape of the solution, the direction of evolution, and the spatial position of the main peaks. The main remaining limitation is that peak amplitudes are still underestimated.
 
 ---
 
 ## Status
 
-This project is currently paused after completing the first classical ML surrogate pipeline.
+This project is paused after completing a first clean classical ML surrogate pipeline.
 
 The final retained model is:
 
 $$
-\text{Kernel Ridge Regression}
+\mathrm{Kernel\ Ridge}
 +
-\text{HGB residual correction}
+\mathrm{HGB\ residual\ correction}
 +
-\text{amplitude calibration}
+\mathrm{amplitude\ calibration}
 $$
 
-It provides a clean baseline for future experiments with more advanced surrogate models.
+This provides a baseline for future experiments with PCA/POD representations, Fourier features, rollout-aware training, or neural surrogate models.

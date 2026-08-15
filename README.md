@@ -10,21 +10,21 @@ The test case is the one-dimensional viscous Burgers equation:
 
 where \(u(x,t)\) is the solution field and \(\nu\) is the viscosity.
 
-The objective is to learn a discrete flow map of the form:
+The learning objective is to approximate a discrete flow map:
 
 ```math
 (u^n, \nu) \mapsto u^{n+k}
 ```
 
-where \(u^n\in\mathbb{R}^N\) is the discretized solution at time step \(n\), and \(k\) is the prediction horizon.
+where \(u^n \in \mathbb{R}^N\) is the discretized solution at time step \(n\), and \(k\) is the prediction horizon.
 
-This project is Part I of a larger study. The goal here is to build a clean raw-grid classical ML baseline, evaluate its rollout behavior, and identify limitations that motivate a more systematic reduced-coordinate study in Part II.
+This repository is Part I of a larger project. The goal is to build a clean raw-grid classical ML baseline, evaluate its rollout behavior, and identify the limitations that motivate a more systematic reduced-coordinate study in Part II.
 
 ---
 
 ## Numerical solver
 
-Reference trajectories are generated with a numerical solver using:
+Reference trajectories are generated using:
 
 - Rusanov flux for the nonlinear convection term;
 - central finite differences for the diffusion term;
@@ -58,7 +58,7 @@ E^n = \frac{1}{2}\sum_i (u_i^n)^2\Delta x
   <img src="figures/energysin.png" width="520"/>
 </p>
 
-This energy decay is used as a simple sanity check for the numerical solver.
+This decay is used as a sanity check that the numerical solver captures the dissipative behavior of viscous Burgers dynamics.
 
 ---
 
@@ -70,15 +70,15 @@ Random periodic initial conditions are generated as finite Fourier sums:
 u(x,0) = \sum_{j=1}^{5} a_j\sin(2\pi jx + \theta_j)
 ```
 
-where amplitudes \(a_j\), phases \(\theta_j\), and viscosity values \(\nu\) are sampled randomly.
+where the amplitudes \(a_j\), phases \(\theta_j\), and viscosity values \(\nu\) are sampled randomly.
 
-Each supervised sample is:
+Each supervised input is:
 
 ```math
 X = (u_0^n, u_1^n, \ldots, u_{N-1}^n, \nu)
 ```
 
-with target:
+and the target is:
 
 ```math
 Y = (u_0^{n+k}, u_1^{n+k}, \ldots, u_{N-1}^{n+k})
@@ -92,19 +92,20 @@ Main experimental parameters:
 |---|---:|
 | Grid size | \(N = 128\) |
 | Time step | \(\Delta t = 10^{-4}\) |
-| Solver steps | \(5000\) |
+| Solver steps | `5000` |
 | Final time | \(T = 0.5\) |
 | Prediction horizon | `store_every = 250` |
 | Physical prediction time | \(250\Delta t = 0.025\) |
 | Number of trajectories | `30` |
 | Train / validation trajectories | `25 / 5` |
 | Viscosity values | `[0.01, 0.02, 0.05, 0.1]` |
+| Random seed | `42` |
 
 ---
 
 ## Models
 
-The following classical ML models are tested on raw grid states:
+The tested classical models are:
 
 - Persistence baseline;
 - Linear Ridge regression;
@@ -113,26 +114,21 @@ The following classical ML models are tested on raw grid states:
 - Kernel Ridge with HGB residual correction;
 - Kernel Ridge with HGB correction and rollout-calibrated amplitude gain.
 
-The final corrected model is:
+Kernel Ridge Regression is used as the main baseline because it gives the best standalone one-step validation error among the tested classical models:
 
 ```math
-\hat{u}_{\mathrm{final}}^{n+k}
-=
-\bar{u}^0
-+
-g
-\left(
 \hat{u}_{\mathrm{KRR}}^{n+k}
-+
-\hat{e}_{\mathrm{HGB}}^{n+k}
--
-\bar{u}^0
-\right)
+=
+f_{\mathrm{KRR}}(u^n,\nu)
 ```
 
-where \(\hat{e}_{\mathrm{HGB}}^{n+k}\) is a learned residual correction and \(g = 0.85\) is the validation-selected rollout gain.
+---
 
-The residual correction is trained as:
+## Residual correction
+
+After fitting Kernel Ridge, a second model is trained to correct its residual error.
+
+The residual target is:
 
 ```math
 e^{n+k}
@@ -142,7 +138,103 @@ u_{\mathrm{true}}^{n+k}
 \hat{u}_{\mathrm{KRR}}^{n+k}
 ```
 
-and then added back to the Kernel Ridge prediction.
+The correction model learns:
+
+```math
+\hat{e}_{\mathrm{HGB}}^{n+k}
+=
+f_{\mathrm{HGB}}(u^n,\nu,\hat{u}_{\mathrm{KRR}}^{n+k})
+```
+
+The corrected prediction is:
+
+```math
+\tilde{u}^{n+k}
+=
+\hat{u}_{\mathrm{KRR}}^{n+k}
++
+\hat{e}_{\mathrm{HGB}}^{n+k}
+```
+
+The HGB correction is used as a nonlinear residual model. The motivation is that, after Kernel Ridge prediction, the remaining error may still depend nonlinearly on the current state, the viscosity, and the predicted future state. HistGradientBoosting provides a classical non-neural way to test whether such residual structure can be captured.
+
+In this experiment, HGB residual correction does not improve one-step error by itself:
+
+| Model | One-step MSE | One-step relative \(L^2\) |
+|---|---:|---:|
+| Kernel Ridge | **0.003978** | **0.248** |
+| Kernel Ridge + HGB correction | 0.004418 | 0.261 |
+
+It is therefore interpreted as a residual-correction experiment rather than a clear standalone improvement.
+
+---
+
+## Rollout-calibrated amplitude gain
+
+During rollout, the model is recursively applied. Small amplitude errors can accumulate because the model feeds its own predictions back as future inputs.
+
+After residual correction, the final rollout model applies a scalar gain to the deviation from the initial spatial mean:
+
+```math
+\hat{u}_{\mathrm{final}}^{n+k}
+=
+\bar{u}^0
++
+g
+\left(
+\tilde{u}^{n+k}
+-
+\bar{u}^0
+\right)
+```
+
+where
+
+```math
+\bar{u}^0
+=
+\frac{1}{N}
+\sum_{i=0}^{N-1} u_i^0
+```
+
+The gain is selected by validation rollout error minimization:
+
+```math
+g^\star
+=
+\arg\min_g
+\frac{
+\left\lVert
+u_{\mathrm{true}}^{\mathrm{rollout}}
+-
+u_{\mathrm{pred}}^{\mathrm{rollout}}(g)
+\right\rVert_2
+}{
+\left\lVert
+u_{\mathrm{true}}^{\mathrm{rollout}}
+\right\rVert_2
+}
+```
+
+The tested values were:
+
+```math
+g \in \{0.50, 0.55, 0.60, \ldots, 1.50\}
+```
+
+The selected rollout gain was:
+
+```math
+g^\star = 0.85
+```
+
+with mean validation rollout relative \(L^2\):
+
+```math
+0.6289823688059181
+```
+
+This gain slightly damps amplitudes. It is selected from validation rollout performance.
 
 ---
 
@@ -163,7 +255,7 @@ Two evaluation regimes are used:
 - **one-step prediction**, where the model predicts one future state;
 - **rollout prediction**, where the model is recursively applied to generate a full trajectory.
 
-Rollout evaluation is the most important test because errors compound when the model uses its own predictions as future inputs.
+Rollout evaluation is the more important test because errors compound when the model uses its own predictions as future inputs.
 
 ---
 
@@ -237,7 +329,7 @@ A practical surrogate should eventually be faster than recomputing the PDE solut
 
 In this implementation, the corrected raw-grid surrogate is not faster than the numerical solver. This is mainly due to the cost of Kernel Ridge prediction, the HGB residual correction, and repeated raw-grid autoregressive rollout.
 
-This result does not invalidate the learning experiment; it shows that this first raw-grid model is a diagnostic baseline rather than a deployable fast surrogate.
+This result does not invalidate the learning experiment. It shows that this first raw-grid model is a diagnostic baseline rather than a deployable fast surrogate.
 
 ---
 

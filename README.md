@@ -128,19 +128,33 @@ f_{\mathrm{KRR}}(u^n,\nu)
 
 ## Residual correction
 
-After fitting Kernel Ridge, a second model is trained to correct its residual error.
+After fitting Kernel Ridge, a second model is trained to correct the residual error left by the baseline predictor.
 
-The residual target is:
+Let the true discrete flow map be denoted by:
+
+```math
+F_k(u^n,\nu) = u^{n+k}
+```
+
+Kernel Ridge gives a first approximation:
+
+```math
+\hat{u}_{\mathrm{KRR}}^{n+k}
+=
+f_{\mathrm{KRR}}(u^n,\nu)
+```
+
+The residual left by this baseline is:
 
 ```math
 e^{n+k}
 =
-u_{\mathrm{true}}^{n+k}
+F_k(u^n,\nu)
 -
-\hat{u}_{\mathrm{KRR}}^{n+k}
+f_{\mathrm{KRR}}(u^n,\nu)
 ```
 
-The correction model learns:
+The correction model is trained to approximate this residual using the current state, the viscosity, and the KRR prediction:
 
 ```math
 \hat{e}_{\mathrm{HGB}}^{n+k}
@@ -148,7 +162,7 @@ The correction model learns:
 f_{\mathrm{HGB}}(u^n,\nu,\hat{u}_{\mathrm{KRR}}^{n+k})
 ```
 
-The corrected prediction is:
+The corrected prediction is then:
 
 ```math
 \tilde{u}^{n+k}
@@ -158,7 +172,20 @@ The corrected prediction is:
 \hat{e}_{\mathrm{HGB}}^{n+k}
 ```
 
-The HGB correction is used as a nonlinear residual model. The motivation is that, after Kernel Ridge prediction, the remaining error may still depend nonlinearly on the current state, the viscosity, and the predicted future state. HistGradientBoosting provides a classical non-neural way to test whether such residual structure can be captured.
+The motivation is residual learning. If the baseline model leaves a structured error, then the conditional residual
+
+```math
+\mathbb{E}
+\left[
+e^{n+k}
+\mid
+u^n,\nu,\hat{u}_{\mathrm{KRR}}^{n+k}
+\right]
+```
+
+may be nonzero and may depend nonlinearly on the current state, the viscosity, and the predicted future state. A second-stage residual model can test whether this remaining structure is learnable.
+
+HistGradientBoosting is used because it is a classical non-neural nonlinear regressor. It can model nonlinear feature interactions in the residual without replacing the main Kernel Ridge baseline. In this project, it is therefore used specifically as a residual-correction experiment, not as the primary surrogate.
 
 In this experiment, HGB residual correction does not improve one-step error by itself:
 

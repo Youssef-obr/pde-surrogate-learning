@@ -5,20 +5,18 @@ This repository studies whether lightweight classical machine learning models ca
 The test case is the one-dimensional viscous Burgers equation:
 
 ```math
-\partial_t u + u\partial_x u = \nu \partial_{xx}u
+\partial_t u + u\,\partial_x u = \nu\,\partial_{xx}u
 ```
 
-where \(u(x,t)\) is the solution field and \(\nu\) is the viscosity.
-
-The learning objective is to approximate a discrete flow map:
+The objective is to learn a discrete flow map:
 
 ```math
 (u^n, \nu) \mapsto u^{n+k}
 ```
 
-where \(u^n \in \mathbb{R}^N\) is the discretized solution at time step \(n\), and \(k\) is the prediction horizon.
+where `u^n` is the discretized solution at time step `n`, `nu` is the viscosity, and `k` is the prediction horizon.
 
-This repository is Part I of a larger project. The goal is to build a clean raw-grid classical ML baseline, evaluate its rollout behavior, and identify the limitations that motivate a more systematic reduced-coordinate study in Part II.
+This repository is Part I of a larger project. The goal is to build a clean raw-grid classical ML baseline, evaluate its rollout behavior, and identify its main limitations.
 
 ---
 
@@ -58,7 +56,7 @@ E^n = \frac{1}{2}\sum_i (u_i^n)^2\Delta x
   <img src="figures/energysin.png" width="520"/>
 </p>
 
-This decay is used as a sanity check that the numerical solver captures the dissipative behavior of viscous Burgers dynamics.
+This decay is used as a sanity check that the solver captures the dissipative behavior of viscous Burgers dynamics.
 
 ---
 
@@ -69,8 +67,6 @@ Random periodic initial conditions are generated as finite Fourier sums:
 ```math
 u(x,0) = \sum_{j=1}^{5} a_j\sin(2\pi jx + \theta_j)
 ```
-
-where the amplitudes \(a_j\), phases \(\theta_j\), and viscosity values \(\nu\) are sampled randomly.
 
 Each supervised input is:
 
@@ -90,16 +86,22 @@ Main experimental parameters:
 
 | Parameter | Value |
 |---|---:|
-| Grid size | \(N = 128\) |
-| Time step | \(\Delta t = 10^{-4}\) |
+| Grid size | `N = 128` |
+| Time step | `delta_t = 1e-4` |
 | Solver steps | `5000` |
-| Final time | \(T = 0.5\) |
+| Final time | `T = 0.5` |
 | Prediction horizon | `store_every = 250` |
-| Physical prediction time | \(250\Delta t = 0.025\) |
+| Physical prediction time | `0.025` |
 | Number of trajectories | `30` |
 | Train / validation trajectories | `25 / 5` |
 | Viscosity values | `[0.01, 0.02, 0.05, 0.1]` |
 | Random seed | `42` |
+
+The prediction horizon corresponds to:
+
+```math
+250 \times 10^{-4} = 0.025
+```
 
 ---
 
@@ -160,7 +162,7 @@ The HGB correction is used as a nonlinear residual model. The motivation is that
 
 In this experiment, HGB residual correction does not improve one-step error by itself:
 
-| Model | One-step MSE | One-step relative \(L^2\) |
+| Model | One-step MSE | One-step relative L2 |
 |---|---:|---:|
 | Kernel Ridge | **0.003978** | **0.248** |
 | Kernel Ridge + HGB correction | 0.004418 | 0.261 |
@@ -228,7 +230,7 @@ The selected rollout gain was:
 g^\star = 0.85
 ```
 
-with mean validation rollout relative \(L^2\):
+with mean validation rollout relative L2:
 
 ```math
 0.6289823688059181
@@ -240,7 +242,7 @@ This gain slightly damps amplitudes. It is selected from validation rollout perf
 
 ## Evaluation
 
-The main metric is the relative \(L^2\) error:
+The main metric is the relative L2 error:
 
 ```math
 \frac{
@@ -261,7 +263,7 @@ Rollout evaluation is the more important test because errors compound when the m
 
 ## Results
 
-| Model | One-step relative \(L^2\) | Rollout relative \(L^2\) |
+| Model | One-step relative L2 | Rollout relative L2 |
 |---|---:|---:|
 | Persistence | 0.506 | 7.55 |
 | Linear Ridge | 0.277 | 0.707 |
@@ -278,7 +280,7 @@ The main conclusion is that classical ML models can learn meaningful short-horiz
 
 ## Final rollout
 
-The animation below compares the corrected model rollout with the reference numerical trajectory on an unseen validation trajectory.
+The animation below shows the evolution predicted by the final corrected model against the reference numerical trajectory on an unseen validation trajectory.
 
 <p align="center">
   <img src="figures/rollout_kernel_ridge_store250.gif" width="620"/>
@@ -290,7 +292,7 @@ The model captures the qualitative form of the solution, including the global sh
 
 ## Diagnostic plots
 
-Pointwise diagnostic plots are used to inspect calibration errors beyond global relative \(L^2\).
+Pointwise diagnostic plots are used to inspect calibration errors beyond global relative L2.
 
 <table>
   <tr>
@@ -333,7 +335,7 @@ This result does not invalidate the learning experiment. It shows that this firs
 
 ---
 
-## Interpretation
+## Interpretation and next step
 
 This repository establishes a first raw-grid classical ML baseline for Burgers surrogate modeling.
 
@@ -343,79 +345,8 @@ The main findings are:
 2. One-step error is not sufficient to judge surrogate quality.
 3. Rollout prediction exposes instability and amplitude miscalibration.
 4. Raw-grid corrected models are not necessarily computationally efficient.
-5. Better coordinate representations are likely needed for stable and efficient classical surrogates.
 
----
-
-## Toward Part II
-
-Part II will investigate whether these failure modes are partly caused by learning directly in raw physical grid coordinates.
-
-The planned research question is:
-
-```math
-\text{Do reduced coordinates improve classical ML rollouts for Burgers dynamics?}
-```
-
-The next study will compare:
-
-- raw-grid states;
-- PCA / POD coefficients;
-- Fourier coefficients.
-
-The evaluation will include:
-
-- one-step relative \(L^2\);
-- rollout relative \(L^2\);
-- extrema error;
-- energy decay error;
-- spectral error;
-- rollout stability;
-- prediction time.
-
-The goal is to understand why raw-grid classical ML surrogates can predict visually plausible trajectories while still failing on physically important quantities such as amplitudes, spectra, and long-time behavior.
-
----
-
-## Relation to existing work
-
-Burgers surrogate modeling is a standard benchmark in scientific machine learning and neural operator literature. This repository does not claim to introduce a new Burgers solver or a new surrogate architecture.
-
-Instead, it serves as a student research baseline focused on lightweight classical ML models trained directly on raw grid data. The follow-up project will connect this baseline to reduced-order and operator-learning ideas more systematically.
-
-Relevant references for the next stage include:
-
-- Fourier Neural Operator for Parametric Partial Differential Equations;
-- PDEBench: An Extensive Benchmark for Scientific Machine Learning;
-- non-intrusive reduced-order modeling and regression-based surrogate methods for PDEs.
-
----
-
-## How to run
-
-Install the required packages:
-
-```bash
-pip install -r requirements.txt
-```
-
-Then run:
-
-```bash
-python burgers_structured/main.py
-```
-
-The program will:
-
-1. run a solver demo;
-2. generate numerical Burgers trajectories;
-3. train classical ML models;
-4. evaluate one-step prediction;
-5. train the residual correction;
-6. apply the fixed rollout gain;
-7. compare prediction cost with numerical solving;
-8. save the rollout GIF;
-9. show diagnostic plots.
+The next part of the project will study whether reduced-coordinate representations improve classical ML rollouts. In particular, it will compare raw-grid states with PCA/POD coefficients and Fourier coefficients, using rollout error, extrema error, energy decay, spectral error, and prediction time.
 
 ---
 
@@ -432,5 +363,3 @@ The conclusion is:
 ```math
 \text{Classical ML can learn meaningful Burgers dynamics, but raw-grid corrected rollouts remain limited in accuracy and efficiency.}
 ```
-
-Part II will focus on reduced-coordinate surrogate modeling and systematic failure-mode analysis.
